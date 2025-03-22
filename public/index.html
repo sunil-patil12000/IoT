@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Object Detection API Tester</title>
+  <!-- Add TensorFlow.js and COCO-SSD model scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    .container {
+      margin-top: 20px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      min-height: 100px;
+    }
+    #imagePreview {
+      max-width: 100%;
+      margin-top: 10px;
+    }
+    .image-container {
+      position: relative;
+      display: inline-block;
+      margin-top: 15px;
+    }
+    .bounding-box {
+      position: absolute;
+      border: 2px solid #FF0000;
+      background-color: rgba(255, 0, 0, 0.2);
+      pointer-events: none;
+    }
+    .object-label {
+      position: absolute;
+      background-color: #FF0000;
+      color: white;
+      padding: 2px 6px;
+      font-size: 12px;
+      border-radius: 3px;
+      pointer-events: none;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 2s linear infinite;
+      display: inline-block;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .api-info {
+      margin-top: 30px;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border-radius: 5px;
+    }
+    .test-controls {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f0f0f0;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Object Detection API Tester</h1>
+  
+  <div class="container">
+    <div class="form-group">
+      <label for="imageInput">Upload an image:</label>
+      <input type="file" id="imageInput" accept="image/*">
+    </div>
+    
+    <div class="form-group image-container" id="previewContainer" style="display: none;">
+      <img id="imagePreview">
+    </div>
+    
+    <button id="detectButton">Detect Objects</button>
+    <button id="toggleModeButton" style="background-color: #3498db;">Toggle Local/API Mode</button>
+    
+    <div id="result">
+      <p>Results will appear here after detection...</p>
+    </div>
+
+    <div class="test-controls">
+      <h3>Detection Options</h3>
+      <button id="clearButton">Clear Results</button>
+      
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="useLocalModel" checked>
+          Use Browser-based Detection (works offline)
+        </label>
+      </div>
+      
+      <div class="form-group" id="apiEndpointContainer" style="display: none;">
+        <label for="apiEndpoint">Remote API Endpoint:</label>
+        <input type="text" id="apiEndpoint" value="https://your-backend-url.com/api/detect" style="width: 300px;">
+      </div>
+      
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="showDebugInfo" checked>
+          Show Debug Information
+        </label>
+      </div>
+    </div>
+
+    <div id="debugInfo" style="margin-top: 20px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; font-family: monospace;">
+      <h3>Debug Information</h3>
+      <div id="debugContent"></div>
+    </div>
+
+    <div class="api-info">
+      <h3>Deployment Information</h3>
+      <p>This app supports two modes of operation:</p>
+      <ul>
+        <li><strong>Browser-based Detection:</strong> Uses TensorFlow.js in your browser - works offline but may be slower</li>
+        <li><strong>Remote API:</strong> Uses a remote server for detection - faster but requires internet connection</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // Global model reference
+    let model = null;
+    let isModelLoading = false;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Element references
+      const imageInput = document.getElementById('imageInput');
+      const imagePreview = document.getElementById('imagePreview');
+      const previewContainer = document.getElementById('previewContainer');
+      const detectButton = document.getElementById('detectButton');
+      const toggleModeButton = document.getElementById('toggleModeButton');
+      const resultDiv = document.getElementById('result');
+      const clearButton = document.getElementById('clearButton');
+      const useLocalModelCheckbox = document.getElementById('useLocalModel');
+      const apiEndpointContainer = document.getElementById('apiEndpointContainer');
+      const apiEndpointInput = document.getElementById('apiEndpoint');
+      const showDebugInfoCheckbox = document.getElementById('showDebugInfo');
+      const debugInfo = document.getElementById('debugInfo');
+      const debugContent = document.getElementById('debugContent');
+      
+      // Toggle between local and API mode
+      toggleModeButton.addEventListener('click', () => {
+        useLocalModelCheckbox.checked = !useLocalModelCheckbox.checked;
+        updateUIForMode();
+      });
+      
+      // Update UI based on selected mode
+      function updateUIForMode() {
+        if (useLocalModelCheckbox.checked) {
+          apiEndpointContainer.style.display = 'none';
+          toggleModeButton.textContent = 'Switch to Remote API Mode';
+          // Preload model if not already loading
+          if (!model && !isModelLoading) {
+            loadModel();
+          }
+        } else {
+          apiEndpointContainer.style.display = 'block';
+          toggleModeButton.textContent = 'Switch to Browser Mode';
+        }
+      }
+      
+      // Initialize mode
+      updateUIForMode();
+      
+      // Show/hide debug info based on checkbox
+      showDebugInfoCheckbox.addEventListener('change', () => {
+        debugInfo.style.display = showDebugInfoCheckbox.checked ? 'block' : 'none';
+      });
+      
+      // Load COCO-SSD model
+      async function loadModel() {
+        if (model) return model;
+        
+        try {
+          isModelLoading = true;
+          debugContent.innerHTML = '<p>Loading TensorFlow.js model (this may take a moment)...</p>';
+          
+          // Load the model
+          model = await cocoSsd.load();
+          
+          debugContent.innerHTML += '<p>Model loaded successfully!</p>';
+          isModelLoading = false;
+          return model;
+        } catch (error) {
+          debugContent.innerHTML += `<p>Error loading model: ${error.message}</p>`;
+          isModelLoading = false;
+          throw error;
+        }
+      }
+      
+      // Preview the selected image
+      imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            imagePreview.src = event.target.result;
+            previewContainer.style.display = 'block';
+            
+            // Clear any previous bounding boxes
+            clearBoundingBoxes();
+            
+            // Add image info to debug
+            debugContent.innerHTML = `
+              <p>Image loaded: ${file.name}</p>
+              <p>Size: ${(file.size / 1024).toFixed(2)} KB</p>
+              <p>Type: ${file.type}</p>
+            `;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+      
+      // Detect objects in the image
+      detectButton.addEventListener('click', async () => {
+        const file = imageInput.files[0];
+        if (!file) {
+          alert('Please select an image first.');
+          return;
+        }
+        
+        // Clear previous bounding boxes
+        clearBoundingBoxes();
+        
+        // Show loading state
+        detectButton.disabled = true;
+        resultDiv.innerHTML = '<div class="spinner"></div><p>Processing image...</p>';
+        
+        if (useLocalModelCheckbox.checked) {
+          // Browser-based detection
+          await detectLocalObjects();
+        } else {
+          // Remote API detection
+          await detectRemoteObjects();
+        }
+        
+        // Re-enable the button
+        detectButton.disabled = false;
+      });
+      
+      // Detect objects using the local model
+      async function detectLocalObjects() {
+        try {
+          debugContent.innerHTML = '<p>Preparing image for local detection...</p>';
+          
+          // Make sure the model is loaded
+          if (!model) {
+            await loadModel();
+          }
+          
+          // Get image from the preview
+          const img = document.getElementById('imagePreview');
+          
+          if (!img.complete) {
+            return new Promise((resolve) => {
+              img.onload = () => {
+                detectLocalObjects().then(resolve);
+              };
+            });
+          }
+          
+          debugContent.innerHTML += '<p>Running detection with TensorFlow.js...</p>';
+          const startTime = Date.now();
+          
+          // Run detection
+          const predictions = await model.detect(img);
+          
+          const endTime = Date.now();
+          debugContent.innerHTML += `<p>Detection completed in ${endTime - startTime}ms</p>`;
+          
+          // Format the results to match our API format
+          const objects = predictions.map(prediction => ({
+            object: prediction.class,
+            confidence: prediction.score,
+            boundingBox: [
+              prediction.bbox[0],
+              prediction.bbox[1],
+              prediction.bbox[2],
+              prediction.bbox[3]
+            ]
+          }));
+          
+          // Display results
+          displayResults(objects);
+          drawBoundingBoxes(objects);
+          
+        } catch (error) {
+          resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+          debugContent.innerHTML += `<p>Error occurred: ${error.message}</p>`;
+        }
+      }
+      
+      // Detect objects using the remote API
+      async function detectRemoteObjects() {
+        try {
+          const formData = new FormData();
+          formData.append('image', imageInput.files[0]);
+          
+          const apiEndpoint = apiEndpointInput.value.trim();
+          if (!apiEndpoint) {
+            throw new Error('API endpoint URL is required for remote detection');
+          }
+          
+          debugContent.innerHTML = `<p>Sending image to remote API: ${apiEndpoint}...</p>`;
+          const startTime = Date.now();
+          
+          const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            body: formData
+          });
+          
+          const endTime = Date.now();
+          
+          if (!response.ok) {
+            throw new Error(`API responded with status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          debugContent.innerHTML += `
+            <p>Response received in ${endTime - startTime}ms</p>
+            <p>Status: ${response.status}</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+          
+          if (data.success) {
+            displayResults(data.objects);
+            drawBoundingBoxes(data.objects);
+          } else {
+            throw new Error(data.error || 'Unknown API error');
+          }
+          
+        } catch (error) {
+          resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+          debugContent.innerHTML += `<p>Error occurred: ${error.message}</p>`;
+        }
+      }
+      
+      function displayResults(objects) {
+        if (!objects || objects.length === 0) {
+          resultDiv.innerHTML = '<h3>No objects detected</h3>';
+          return;
+        }
+        
+        let resultsHtml = '<h3>Detected Objects:</h3>';
+        
+        resultsHtml += '<ul>';
+        objects.forEach(obj => {
+          resultsHtml += `<li>${obj.object} (${(obj.confidence * 100).toFixed(2)}%)</li>`;
+        });
+        resultsHtml += '</ul>';
+        
+        // Add raw JSON for testing
+        resultsHtml += '<h4>Raw Response:</h4>';
+        resultsHtml += `<pre>${JSON.stringify(objects, null, 2)}</pre>`;
+        
+        resultDiv.innerHTML = resultsHtml;
+      }
+      
+      function drawBoundingBoxes(objects) {
+        if (!objects || objects.length === 0) return;
+        
+        // Make sure we have an image
+        if (!imagePreview.complete) {
+          imagePreview.onload = () => drawBoundingBoxes(objects);
+          return;
+        }
+        
+        // Debug info about the image dimensions
+        if (showDebugInfoCheckbox.checked) {
+          debugContent.innerHTML += `
+            <p>Drawing bounding boxes:</p>
+            <p>Image displayed dimensions: ${imagePreview.width}x${imagePreview.height}</p>
+            <p>Image natural dimensions: ${imagePreview.naturalWidth}x${imagePreview.naturalHeight}</p>
+          `;
+        }
+        
+        // Clear previous bounding boxes
+        clearBoundingBoxes();
+        
+        // Get the natural dimensions and the displayed dimensions to calculate scale
+        const imageWidth = imagePreview.width;
+        const imageHeight = imagePreview.height;
+        const naturalWidth = imagePreview.naturalWidth;
+        const naturalHeight = imagePreview.naturalHeight;
+        
+        const scaleX = imageWidth / naturalWidth;
+        const scaleY = imageHeight / naturalHeight;
+        
+        // Draw each bounding box
+        objects.forEach((obj, index) => {
+          if (!obj.boundingBox || !Array.isArray(obj.boundingBox) || obj.boundingBox.length !== 4) {
+            console.error('Invalid bounding box for object:', obj);
+            return;
+          }
+          
+          const [x, y, width, height] = obj.boundingBox;
+          
+          // Create the bounding box element
+          const box = document.createElement('div');
+          box.className = 'bounding-box';
+          box.style.left = `${x * scaleX}px`;
+          box.style.top = `${y * scaleY}px`;
+          box.style.width = `${width * scaleX}px`;
+          box.style.height = `${height * scaleY}px`;
+          
+          // Create the label
+          const label = document.createElement('div');
+          label.className = 'object-label';
+          label.textContent = `${obj.object} (${(obj.confidence * 100).toFixed(0)}%)`;
+          label.style.left = `${x * scaleX}px`;
+          label.style.top = `${(y * scaleY) - 20}px`;
+          
+          // Add to container
+          previewContainer.appendChild(box);
+          previewContainer.appendChild(label);
+          
+          if (showDebugInfoCheckbox.checked) {
+            debugContent.innerHTML += `
+              <p>Box ${index + 1}: ${obj.object} at [${x.toFixed(1)}, ${y.toFixed(1)}, ${width.toFixed(1)}, ${height.toFixed(1)}]</p>
+            `;
+          }
+        });
+      }
+      
+      function clearBoundingBoxes() {
+        // Remove all bounding boxes and labels
+        const boxes = document.querySelectorAll('.bounding-box, .object-label');
+        boxes.forEach(box => box.remove());
+      }
+      
+      // Initialize debug info display
+      debugInfo.style.display = showDebugInfoCheckbox.checked ? 'block' : 'none';
+      debugContent.innerHTML = '<p>Application loaded. Waiting for image...</p>';
+    });
+  </script>
+</body>
+</html>

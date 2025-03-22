@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Object Detection API Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1, h2 {
+      color: #333;
+    }
+    .container {
+      margin-top: 20px;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    .endpoint {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    .image-preview {
+      max-width: 300px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Object Detection API Client</h1>
+  
+  <div class="container">
+    <div class="form-group">
+      <label for="apiKey">API Key:</label>
+      <input type="text" id="apiKey" value="demo-key-123" placeholder="Enter your API key">
+    </div>
+
+    <h2>API Endpoints</h2>
+    
+    <div class="endpoint">
+      <h3>Health Check</h3>
+      <button onclick="checkHealth()">Check API Health</button>
+      <pre id="healthResult">Results will appear here...</pre>
+    </div>
+    
+    <div class="endpoint">
+      <h3>Detect Objects</h3>
+      <div class="form-group">
+        <label for="imageFile">Upload Image:</label>
+        <input type="file" id="imageFile" accept="image/*">
+        <img id="imagePreview" class="image-preview" style="display:none;">
+      </div>
+      <button onclick="detectObjects()">Detect Objects</button>
+      <pre id="detectResult">Results will appear here...</pre>
+    </div>
+    
+    <div class="endpoint">
+      <h3>API Documentation</h3>
+      <button onclick="getApiDocs()">Get API Documentation</button>
+      <pre id="docsResult">Results will appear here...</pre>
+    </div>
+    
+    <div class="endpoint">
+      <h3>Debug Info</h3>
+      <button onclick="getDebugInfo()">Get Debug Info</button>
+      <pre id="debugResult">Results will appear here...</pre>
+    </div>
+  </div>
+
+  <script>
+    // Preview image when selected
+    document.getElementById('imageFile').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const preview = document.getElementById('imagePreview');
+          preview.src = e.target.result;
+          preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Get API key from input
+    function getApiKey() {
+      return document.getElementById('apiKey').value.trim();
+    }
+
+    // Health check endpoint
+    async function checkHealth() {
+      const resultElement = document.getElementById('healthResult');
+      resultElement.textContent = 'Loading...';
+      
+      try {
+        const response = await fetch('/api/health');
+        const data = await response.json();
+        resultElement.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        resultElement.textContent = `Error: ${error.message}`;
+      }
+    }
+
+    // Object detection endpoint
+    async function detectObjects() {
+      const resultElement = document.getElementById('detectResult');
+      const imageFile = document.getElementById('imageFile').files[0];
+      const apiKey = getApiKey();
+      
+      if (!imageFile) {
+        resultElement.textContent = 'Please select an image file.';
+        return;
+      }
+      
+      resultElement.textContent = 'Processing...';
+      
+      try {
+        const formData = new FormData();
+        formData.append('image', imageFile);
+        
+        const response = await fetch('/api/detect', {
+          method: 'POST',
+          headers: {
+            'X-API-Key': apiKey
+          },
+          body: formData
+        });
+        
+        const data = await response.json();
+        resultElement.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        resultElement.textContent = `Error: ${error.message}`;
+      }
+    }
+
+    // API documentation endpoint
+    async function getApiDocs() {
+      const resultElement = document.getElementById('docsResult');
+      resultElement.textContent = 'Loading...';
+      
+      try {
+        const response = await fetch('/api/docs');
+        const data = await response.json();
+        resultElement.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        resultElement.textContent = `Error: ${error.message}`;
+      }
+    }
+
+    // Debug info endpoint
+    async function getDebugInfo() {
+      const resultElement = document.getElementById('debugResult');
+      const apiKey = getApiKey();
+      resultElement.textContent = 'Loading...';
+      
+      try {
+        const response = await fetch(`/api/debug`, {
+          headers: {
+            'X-API-Key': apiKey
+          }
+        });
+        
+        const data = await response.json();
+        resultElement.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        resultElement.textContent = `Error: ${error.message}`;
+      }
+    }
+  </script>
+</body>
+</html>

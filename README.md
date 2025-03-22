@@ -1,58 +1,66 @@
 # Object Detection API
 
-This application provides an API for detecting objects in images using TensorFlow.js and the COCO-SSD model.
+This application provides a REST API for detecting objects in images using TensorFlow.js and the COCO-SSD model.
 
 ## Features
 
-- **Dual-mode Operation**: Run detection in the browser or via a Node.js API server
-- **Netlify Deployment**: Frontend can be deployed to Netlify (static hosting)
-- **80 Object Classes**: Detects common objects like people, animals, vehicles, and everyday items
-- **Simple API**: Easy-to-use REST API for integration with other applications
-- **Web Interface**: Built-in testing interface for quick verification
+- **REST API**: Comprehensive endpoints with authentication and rate limiting
+- **Object Detection**: Detects 80 common object classes including people, animals, vehicles
+- **Dual-mode Operation**: Run detection in the browser or via the API server
+- **API Documentation**: Built-in documentation and testing tools
 
-## Deployment Options
-
-### Frontend (Browser-based detection)
-
-Deploy to Netlify by following the instructions in [deploy-netlify.md](./deploy-netlify.md).
-
-This version:
-- Runs TensorFlow.js directly in the browser
-- Works offline once the model is loaded
-- Doesn't require a backend server
-
-### Backend API (Server-based detection)
-
-Deploy to a Node.js hosting platform like Render, Heroku, or Digital Ocean:
-
-1. Create an account on your preferred hosting platform
-2. Deploy the code from this repository
-3. Set up environment variables if necessary
-4. Start the server with `npm start`
-
-## Local Development
+## Setup
 
 1. Install dependencies:
    ```
    npm install
    ```
 
-2. Start the server:
+2. Configure environment variables:
+   ```
+   cp .env.example .env
+   ```
+   Then edit the `.env` file with your settings.
+
+3. Start the server:
    ```
    npm start
    ```
 
-3. Open http://localhost:3000 in your browser to use the web interface.
+4. Access the application:
+   - Web interface: http://localhost:3000
+   - API documentation: http://localhost:3000/api/docs
+   - API client: http://localhost:3000/api-client.html
 
-## API Usage
+## API Endpoints
 
-Send a POST request to `/api/detect` with an image file:
+| Endpoint | Method | Description | Authentication |
+|----------|--------|-------------|----------------|
+| /api/health | GET | Check API status | None |
+| /api/detect | POST | Detect objects in image | API Key |
+| /api/debug | GET | Get debug information | API Key |
+| /api/docs | GET | API documentation | None |
 
+## API Authentication
+
+The API uses API key authentication. Pass your key in either:
+- Request header: `X-API-Key: your-api-key`
+- Query parameter: `?api_key=your-api-key`
+
+For testing, you can use the demo key: `demo-key-123`
+
+## Using the API
+
+### Object Detection
+
+```bash
+curl -X POST \
+  -H "X-API-Key: your-api-key" \
+  -F "image=@/path/to/your/image.jpg" \
+  http://localhost:3000/api/detect
 ```
-curl -X POST -F "image=@/path/to/your/image.jpg" http://localhost:3000/api/detect
-```
 
-Response format:
+Response:
 ```json
 {
   "success": true,
@@ -67,12 +75,25 @@ Response format:
 }
 ```
 
-## Object Classes
+## Deployment Options
 
-The COCO-SSD model can detect 80 common object classes including person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, and many more.
+### Backend API
 
-## Troubleshooting
+Deploy to a Node.js hosting platform:
+1. Set up environment variables
+2. Deploy the code
+3. Use your deployed URL as the API endpoint
 
-- **First Detection is Slow**: The first detection will be slower as the model needs to be loaded into memory.
-- **Browser Performance**: Browser-based detection requires a modern browser and may be slower than server-based detection.
-- **Memory Issues**: TensorFlow.js requires significant memory, especially in the browser.
+### Frontend (Browser-based detection)
+
+Deploy to Netlify following the instructions in [deploy-netlify.md](./deploy-netlify.md).
+
+## Rate Limiting
+
+The API has rate limiting to prevent abuse:
+- 100 requests per 15-minute window per IP address
+- Configure in the `.env` file
+
+## Support
+
+For issues or feature requests, please open an issue in the repository.
